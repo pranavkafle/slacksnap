@@ -224,6 +224,9 @@ function updateTierCheckbox(tier) {
 async function exportSelected() {
   const selected = getSelectedChannels();
   if (selected.length === 0) return;
+  if (config.includeMarkdownExport === false && config.includeJsonExport === false) {
+    throw new Error('Select at least one export format in Settings');
+  }
 
   isExporting = true;
   exportBtn.disabled = true;
@@ -258,15 +261,16 @@ async function exportSelected() {
 
       if (response && response.success) {
         if (response.messageCount > 0) {
-          // Trigger download via background script
-          await chrome.runtime.sendMessage({
-            action: 'DOWNLOAD_FILE',
-            data: {
-              filename: generateFilename(channel.name),
-              content: response.markdown,
-              directory: config.downloadDirectory || 'slack-exports'
+            if (config.includeMarkdownExport !== false) {
+              await chrome.runtime.sendMessage({
+                action: 'DOWNLOAD_FILE',
+                data: {
+                  filename: generateFilename(channel.name),
+                  content: response.markdown,
+                  directory: config.downloadDirectory || 'slack-exports'
+                }
+              });
             }
-          });
 
             if (config.includeJsonExport !== false) {
               await chrome.runtime.sendMessage({
@@ -280,8 +284,7 @@ async function exportSelected() {
               });
             }
 
-          // Accumulate for combined file
-          if (combinedExportCb.checked) {
+            if (combinedExportCb.checked && config.includeMarkdownExport !== false) {
             combinedMarkdown += `\n\n---\n\n## ${channel.name}\n\n` + response.markdown.split('\n').slice(3).join('\n');
           }
         }

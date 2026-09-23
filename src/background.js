@@ -181,6 +181,7 @@ chrome.runtime.onInstalled.addListener((details) => {
       includeThreadReplies: true,
       historyDays: 7,
         incrementalExport: true,
+        includeMarkdownExport: true,
         includeJsonExport: true,
       channels: [],
       lastExportTimestamps: {},

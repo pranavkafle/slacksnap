@@ -909,19 +909,24 @@ async function exportMessagesViaAPI() {
       window.SlackSnapUtils.showNotification('No messages found in the selected date range.', 'success');
       return;
     }
+      if (config.includeMarkdownExport === false && config.includeJsonExport === false) {
+        throw new Error('Select at least one export format in Settings');
+      }
 
     const filename = window.SlackSnapUtils.generateFilename(channelName, config);
 
-    chrome.runtime.sendMessage({
-      action: 'DOWNLOAD_FILE',
-      data: { filename, content: result.markdown, directory: config.downloadDirectory }
-    }, (res) => {
-      if (res && res.success) {
-        window.SlackSnapUtils.showNotification(`✅ Exported ${result.messageCount} messages to ${filename}`, 'success');
-      } else {
-        window.SlackSnapUtils.showNotification(`❌ Download failed: ${res?.error || 'Unknown error'}`, 'error');
+      if (config.includeMarkdownExport !== false) {
+        chrome.runtime.sendMessage({
+          action: 'DOWNLOAD_FILE',
+          data: { filename, content: result.markdown, directory: config.downloadDirectory }
+        }, (res) => {
+          if (res && res.success) {
+            window.SlackSnapUtils.showNotification(`✅ Exported ${result.messageCount} messages to ${filename}`, 'success');
+          } else {
+            window.SlackSnapUtils.showNotification(`❌ Download failed: ${res?.error || 'Unknown error'}`, 'error');
+          }
+        });
       }
-    });
 
       if (config.includeJsonExport !== false) {
         const jsonFilename = filename.replace(/\.[^.]+$/, '') + '.json';
@@ -936,6 +941,8 @@ async function exportMessagesViaAPI() {
         }, (res) => {
           if (!res || !res.success) {
             console.error('❌ JSON download failed:', res?.error || 'Unknown error');
+          } else if (config.includeMarkdownExport === false) {
+            window.SlackSnapUtils.showNotification(`✅ Exported ${result.messageCount} messages to ${jsonFilename}`, 'success');
           }
         });
       }

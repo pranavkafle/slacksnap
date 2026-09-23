@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('includeThreadReplies').checked = config.includeThreadReplies;
         document.getElementById('historyDays').value = config.historyDays;
         document.getElementById('incrementalExport').checked = config.incrementalExport !== false;
+            document.getElementById('includeMarkdownExport').checked = config.includeMarkdownExport !== false;
             document.getElementById('includeJsonExport').checked = config.includeJsonExport !== false;
 
         // Populate channel JSON editor
@@ -48,6 +49,12 @@ form.addEventListener('submit', async (e) => {
     
     try {
         const formData = new FormData(form);
+            const includeMarkdownExport = document.getElementById('includeMarkdownExport').checked;
+            const includeJsonExport = document.getElementById('includeJsonExport').checked;
+
+            if (!includeMarkdownExport && !includeJsonExport) {
+                throw new Error('Select at least one export format');
+            }
         
         const config = {
             downloadDirectory: formData.get('downloadDirectory') || 'slack-exports',
@@ -56,7 +63,8 @@ form.addEventListener('submit', async (e) => {
             includeThreadReplies: document.getElementById('includeThreadReplies').checked,
             historyDays: parseInt(document.getElementById('historyDays').value) || 7,
                 incrementalExport: document.getElementById('incrementalExport').checked,
-                includeJsonExport: document.getElementById('includeJsonExport').checked
+                includeMarkdownExport,
+                includeJsonExport
         };
         
         await saveConfig(config);
@@ -82,6 +90,7 @@ resetBtn.addEventListener('click', async () => {
         document.getElementById('includeThreadReplies').checked = defaultConfig.includeThreadReplies;
         document.getElementById('historyDays').value = defaultConfig.historyDays;
         document.getElementById('incrementalExport').checked = defaultConfig.incrementalExport !== false;
+            document.getElementById('includeMarkdownExport').checked = defaultConfig.includeMarkdownExport !== false;
             document.getElementById('includeJsonExport').checked = defaultConfig.includeJsonExport !== false;
         
         // Save defaults (only general settings, preserve channels)
@@ -92,6 +101,7 @@ resetBtn.addEventListener('click', async () => {
             includeThreadReplies: defaultConfig.includeThreadReplies,
             historyDays: defaultConfig.historyDays,
                 incrementalExport: defaultConfig.incrementalExport,
+                includeMarkdownExport: defaultConfig.includeMarkdownExport,
                 includeJsonExport: defaultConfig.includeJsonExport
         });
         showStatus('Settings reset to defaults', 'success');

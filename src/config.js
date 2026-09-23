@@ -8,6 +8,7 @@ const DEFAULT_CONFIG = {
   includeThreadReplies: true,
   historyDays: 7,
   incrementalExport: true,   // true = only fetch new since last export; false = always use historyDays window
+    includeMarkdownExport: true,
     includeJsonExport: true,
 
   // Batch export configuration

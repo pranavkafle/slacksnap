@@ -147,13 +147,18 @@
                 <div class="description">When enabled, each export only fetches messages since the last run. When disabled, every export always fetches the full history window.</div>
             </div>
 
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="includeJsonExport" name="includeJsonExport">
-                        <label for="includeJsonExport">Also export JSON</label>
-                    </div>
-                    <div class="description">Creates a structured JSON file alongside the Markdown export, including archive and thread links.</div>
+            <div class="form-group">
+                <label>Export formats:</label>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="includeMarkdownExport" name="includeMarkdownExport">
+                    <label for="includeMarkdownExport">Export Markdown</label>
                 </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="includeJsonExport" name="includeJsonExport">
+                    <label for="includeJsonExport">Export JSON</label>
+                </div>
+                <div class="description">Select one or both formats. JSON includes structured messages plus archive and thread links.</div>
+            </div>
             
             <div class="form-group">
                 <div class="checkbox-group">
