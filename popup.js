@@ -243,11 +243,17 @@ async function exportSelected() {
     setChannelStatus(channel.channelId, 'active');
 
     try {
+      const historyDaysCutoff = Date.now() - (config.historyDays || 7) * 86400 * 1000;
+      const lastTs = lastExportTimestamps[channel.channelId];
+      const oldestTimestamp = (config.incrementalExport !== false && lastTs)
+        ? lastTs           // incremental: only fetch new since last export
+        : historyDaysCutoff; // full window: always use historyDays
+
       const response = await chrome.tabs.sendMessage(activeTab.id, {
         action: 'BATCH_EXPORT_CHANNEL',
         channelId: channel.channelId,
         channelName: channel.name,
-        oldestTimestamp: lastExportTimestamps[channel.channelId] || null
+        oldestTimestamp
       });
 
       if (response && response.success) {
@@ -261,6 +267,18 @@ async function exportSelected() {
               directory: config.downloadDirectory || 'slack-exports'
             }
           });
+
+            if (config.includeJsonExport !== false) {
+              await chrome.runtime.sendMessage({
+                action: 'DOWNLOAD_FILE',
+                data: {
+                  filename: generateJsonFilename(channel.name),
+                  content: response.json,
+                  directory: config.downloadDirectory || 'slack-exports',
+                  mimeType: 'application/json'
+                }
+              });
+            }
 
           // Accumulate for combined file
           if (combinedExportCb.checked) {
@@ -471,6 +489,11 @@ function generateFilename(channelName) {
 
   const fmt = (config.fileNameFormat || 'YYYYMMDD-HHmm-{channel}.md');
   return fmt.replace('YYYYMMDD-HHmm', dateStr).replace('{channel}', cleanChannel);
+}
+
+function generateJsonFilename(channelName) {
+  const markdownFilename = generateFilename(channelName);
+  return markdownFilename.replace(/\.[^.]+$/, '') + '.json';
 }
 
 function sleep(ms) {

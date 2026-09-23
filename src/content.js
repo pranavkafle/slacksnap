@@ -692,7 +692,11 @@ function getSlackAuthToken() {
       throw new Error('No Slack teams found in localStorage');
     }
     
-    const teamId = Object.keys(config.teams)[0];
+      const activeTeamMatch = window.location.pathname.match(/^\/client\/([^\/]+)/);
+      const activeTeamId = activeTeamMatch?.[1];
+      const teamId = activeTeamId && config.teams[activeTeamId]
+        ? activeTeamId
+        : Object.keys(config.teams)[0];
     const team = config.teams[teamId];
     
     if (!team || !team.token) {
@@ -755,7 +759,7 @@ function getCurrentChannelId() {
  */
 async function exportChannelViaAPI(channelId, channelName, oldestTimestamp = null) {
   const config = await getConfig();
-  const { token } = getSlackAuthToken();
+  const { token, team } = getSlackAuthToken();
 
   const oldestUnix = oldestTimestamp
     ? Math.floor(oldestTimestamp / 1000)
@@ -766,7 +770,7 @@ async function exportChannelViaAPI(channelId, channelName, oldestTimestamp = nul
 
   if (!apiMessages || apiMessages.length === 0) {
     console.log(`ℹ️ No messages found for ${channelName} in the selected date range.`);
-    return { messageCount: 0, markdown: '', channelName };
+    return { messageCount: 0, markdown: '', json: '', channelName };
   }
 
   // Extract unique user IDs from messages and cache thread replies
@@ -810,6 +814,7 @@ async function exportChannelViaAPI(channelId, channelName, oldestTimestamp = nul
 
   // Enrich messages with usernames and thread replies
   const enrichedMessages = [];
+  const workspaceDomain = getWorkspaceDomain(team);
   for (const apiMsg of apiMessages) {
     const sender = userMap[apiMsg.user] || 'Unknown User';
     let content = window.SlackSnapUtils.cleanText(apiMsg.text || '');
@@ -827,7 +832,15 @@ async function exportChannelViaAPI(channelId, channelName, oldestTimestamp = nul
       }
     }
 
-    enrichedMessages.push({ sender, content, timestamp: apiMsg.ts, threadReplies });
+    const archiveUrls = buildArchiveUrls(workspaceDomain, channelId, apiMsg.ts, apiMsg.thread_ts);
+    enrichedMessages.push({
+      sender,
+      content,
+      timestamp: apiMsg.ts,
+      archiveUrl: archiveUrls.archiveUrl,
+      threadUrl: archiveUrls.threadUrl,
+      threadReplies
+    });
   }
 
   const messages = enrichedMessages
@@ -835,9 +848,45 @@ async function exportChannelViaAPI(channelId, channelName, oldestTimestamp = nul
     .sort((a, b) => parseFloat(a.timestamp) - parseFloat(b.timestamp));
 
   const markdown = convertToMarkdown(messages, channelName, config);
+  const json = JSON.stringify({
+    exportedAt: new Date().toISOString(),
+    channel: { id: channelId, name: channelName },
+    messages
+  }, null, 2);
   console.log(`✅ Processed ${messages.length} messages for ${channelName}`);
 
-  return { messageCount: messages.length, markdown, channelName };
+  return { messageCount: messages.length, markdown, json, channelName };
+}
+
+function getWorkspaceDomain(team) {
+  const configuredDomain = team?.domain || team?.team_domain || team?.team_url;
+  if (configuredDomain) {
+    const hostname = String(configuredDomain)
+      .replace(/^https?:\/\//, '')
+      .split('/')[0];
+    return hostname.includes('.') ? hostname : `${hostname}.slack.com`;
+  }
+
+  const workspaceRequest = performance.getEntriesByType('resource')
+    .map(entry => entry.name)
+    .find(url => {
+      const hostname = new URL(url).hostname;
+      return hostname.endsWith('.slack.com') && hostname !== 'app.slack.com' && hostname !== 'edgeapi.slack.com';
+    });
+
+  return workspaceRequest ? new URL(workspaceRequest).hostname : null;
+}
+
+function buildArchiveUrls(workspaceDomain, channelId, messageTs, threadTs) {
+  if (!workspaceDomain) return { archiveUrl: null, threadUrl: null };
+
+  const messageId = messageTs.replace('.', '');
+  const archiveUrl = `https://${workspaceDomain}/archives/${channelId}/p${messageId}`;
+  const threadUrl = threadTs
+    ? `${archiveUrl}?thread_ts=${encodeURIComponent(threadTs)}&cid=${channelId}`
+    : null;
+
+  return { archiveUrl, threadUrl };
 }
 
 /**
@@ -873,6 +922,23 @@ async function exportMessagesViaAPI() {
         window.SlackSnapUtils.showNotification(`❌ Download failed: ${res?.error || 'Unknown error'}`, 'error');
       }
     });
+
+      if (config.includeJsonExport !== false) {
+        const jsonFilename = filename.replace(/\.[^.]+$/, '') + '.json';
+        chrome.runtime.sendMessage({
+          action: 'DOWNLOAD_FILE',
+          data: {
+            filename: jsonFilename,
+            content: result.json,
+            directory: config.downloadDirectory,
+            mimeType: 'application/json'
+          }
+        }, (res) => {
+          if (!res || !res.success) {
+            console.error('❌ JSON download failed:', res?.error || 'Unknown error');
+          }
+        });
+      }
 
   } catch (error) {
     console.error('❌ API export failed:', error);

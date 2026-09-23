@@ -130,7 +130,8 @@ async function handleFileDownload(data) {
     }
     
     // Convert content to data URL (works in service workers)
-    const dataUrl = 'data:text/markdown;charset=utf-8,' + encodeURIComponent(content);
+    const mimeType = data.mimeType || 'text/markdown';
+    const dataUrl = `data:${mimeType};charset=utf-8,` + encodeURIComponent(content);
     console.log('📝 Created data URL');
     
     // Ensure directory path is properly formatted
@@ -179,6 +180,8 @@ chrome.runtime.onInstalled.addListener((details) => {
       includeTimestamps: true,
       includeThreadReplies: true,
       historyDays: 7,
+        incrementalExport: true,
+        includeJsonExport: true,
       channels: [],
       lastExportTimestamps: {},
       combinedExport: false

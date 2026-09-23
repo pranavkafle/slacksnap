@@ -27,6 +27,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('includeTimestamps').checked = config.includeTimestamps;
         document.getElementById('includeThreadReplies').checked = config.includeThreadReplies;
         document.getElementById('historyDays').value = config.historyDays;
+        document.getElementById('incrementalExport').checked = config.incrementalExport !== false;
+            document.getElementById('includeJsonExport').checked = config.includeJsonExport !== false;
 
         // Populate channel JSON editor
         const channels = config.channels || [];
@@ -52,7 +54,9 @@ form.addEventListener('submit', async (e) => {
             fileNameFormat: formData.get('fileNameFormat') || 'YYYYMMDD-HHmm-{channel}.md',
             includeTimestamps: document.getElementById('includeTimestamps').checked,
             includeThreadReplies: document.getElementById('includeThreadReplies').checked,
-            historyDays: parseInt(document.getElementById('historyDays').value) || 7
+            historyDays: parseInt(document.getElementById('historyDays').value) || 7,
+                incrementalExport: document.getElementById('incrementalExport').checked,
+                includeJsonExport: document.getElementById('includeJsonExport').checked
         };
         
         await saveConfig(config);
@@ -77,6 +81,8 @@ resetBtn.addEventListener('click', async () => {
         document.getElementById('includeTimestamps').checked = defaultConfig.includeTimestamps;
         document.getElementById('includeThreadReplies').checked = defaultConfig.includeThreadReplies;
         document.getElementById('historyDays').value = defaultConfig.historyDays;
+        document.getElementById('incrementalExport').checked = defaultConfig.incrementalExport !== false;
+            document.getElementById('includeJsonExport').checked = defaultConfig.includeJsonExport !== false;
         
         // Save defaults (only general settings, preserve channels)
         await saveConfig({
@@ -84,7 +90,9 @@ resetBtn.addEventListener('click', async () => {
             fileNameFormat: defaultConfig.fileNameFormat,
             includeTimestamps: defaultConfig.includeTimestamps,
             includeThreadReplies: defaultConfig.includeThreadReplies,
-            historyDays: defaultConfig.historyDays
+            historyDays: defaultConfig.historyDays,
+                incrementalExport: defaultConfig.incrementalExport,
+                includeJsonExport: defaultConfig.includeJsonExport
         });
         showStatus('Settings reset to defaults', 'success');
         

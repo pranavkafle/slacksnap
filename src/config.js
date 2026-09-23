@@ -7,6 +7,8 @@ const DEFAULT_CONFIG = {
   includeTimestamps: true,
   includeThreadReplies: true,
   historyDays: 7,
+  incrementalExport: true,   // true = only fetch new since last export; false = always use historyDays window
+    includeJsonExport: true,
 
   // Batch export configuration
   channels: [],              // Array of channel config objects
