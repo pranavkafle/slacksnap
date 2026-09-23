@@ -828,7 +828,12 @@ async function exportChannelViaAPI(channelId, channelName, oldestTimestamp = nul
         const replySender = userMap[reply.user] || 'Unknown User';
         let replyContent = window.SlackSnapUtils.cleanText(reply.text || '');
         replyContent = replyContent.replace(/<@([A-Z0-9]+)>/g, (_, id) => '@' + (userMap[id] || 'unknown'));
-        threadReplies.push({ sender: replySender, content: replyContent, timestamp: reply.ts });
+        threadReplies.push({
+          sender: replySender,
+          content: replyContent,
+          timestamp: reply.ts,
+          raw: reply
+        });
       }
     }
 
@@ -839,17 +844,22 @@ async function exportChannelViaAPI(channelId, channelName, oldestTimestamp = nul
       timestamp: apiMsg.ts,
       archiveUrl: archiveUrls.archiveUrl,
       threadUrl: archiveUrls.threadUrl,
-      threadReplies
+      threadReplies,
+      raw: apiMsg
     });
   }
 
   const messages = enrichedMessages
-    .filter(msg => msg.content && msg.content.trim())
     .sort((a, b) => parseFloat(a.timestamp) - parseFloat(b.timestamp));
 
   const markdown = convertToMarkdown(messages, channelName, config);
   const json = JSON.stringify({
     exportedAt: new Date().toISOString(),
+    exportSettings: {
+      historyDays: config.historyDays,
+      includeThreadReplies: config.includeThreadReplies,
+      incrementalExport: config.incrementalExport
+    },
     channel: { id: channelId, name: channelName },
     messages
   }, null, 2);
@@ -1210,12 +1220,14 @@ async function getMessagesViaHistoryAPI(channelId, oldestUnix, token) {
  * @param {number} retryCount - Current retry attempt (internal use)
  * @returns {Promise<Array>} Array of reply message objects
  */
-async function fetchThreadReplies(channelId, threadTs, oldestUnix, token, retryCount = 0) {
+async function fetchThreadReplies(channelId, threadTs, oldestUnix, token) {
   const maxRetries = 3;
-  
-  try {
-    console.log(`🧵 Fetching thread replies for ${threadTs}${retryCount > 0 ? ` (retry ${retryCount}/${maxRetries})` : ''}`);
-    
+  const allReplies = [];
+  let cursor = '';
+  let hasMore = true;
+
+  console.log(`🧵 Fetching thread replies for ${threadTs}`);
+  while (hasMore) {
     const params = new URLSearchParams({
       token: token,
       channel: channelId,
@@ -1223,43 +1235,42 @@ async function fetchThreadReplies(channelId, threadTs, oldestUnix, token, retryC
       limit: '200',
       oldest: oldestUnix.toString()
     });
-    
-    const response = await fetch('/api/conversations.replies', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'X-Slack-No-Retry': '1'
-      },
-      body: params.toString()
-    });
-    
-    const data = await response.json();
-    
-    if (!data.ok) {
-      // Handle rate limiting with exponential backoff
-      if (data.error === 'ratelimited' && retryCount < maxRetries) {
-        const retryAfter = data.response_metadata?.retry_after || Math.pow(2, retryCount) * 2;
-        console.log(`⏳ Rate limited, waiting ${retryAfter}s before retry ${retryCount + 1}/${maxRetries}...`);
-        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
-        return fetchThreadReplies(channelId, threadTs, oldestUnix, token, retryCount + 1);
+    if (cursor) params.append('cursor', cursor);
+
+    let data;
+    for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
+      const response = await fetch('/api/conversations.replies', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-Slack-No-Retry': '1'
+        },
+        body: params.toString()
+      });
+      data = await response.json();
+
+      if (data.ok) break;
+      if (data.error !== 'ratelimited' || retryCount === maxRetries) {
+        throw new Error(`conversations.replies API failed: ${data.error}`);
       }
-      throw new Error(`conversations.replies API failed: ${data.error}`);
+
+      const retryAfter = data.response_metadata?.retry_after || Math.pow(2, retryCount + 1) * 2;
+      console.log(`⏳ Rate limited, waiting ${retryAfter}s before retry ${retryCount + 1}/${maxRetries}...`);
+      await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
     }
-    
-    console.log(`✅ Found ${data.messages?.length || 0} thread replies`);
-    return data.messages || [];
-  } catch (error) {
-    // If it's a rate limit error and we haven't exhausted retries, try again
-    if (error.message.includes('ratelimited') && retryCount < maxRetries) {
-      const waitTime = Math.pow(2, retryCount) * 2;
-      console.log(`⏳ Rate limit error, waiting ${waitTime}s before retry ${retryCount + 1}/${maxRetries}...`);
-      await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
-      return fetchThreadReplies(channelId, threadTs, oldestUnix, token, retryCount + 1);
+
+    allReplies.push(...(data.messages || []));
+    cursor = data.response_metadata?.next_cursor || '';
+    hasMore = Boolean(data.has_more);
+    if (hasMore && !cursor) {
+      throw new Error(`conversations.replies returned an incomplete page for thread ${threadTs}`);
     }
-    
-    console.error('❌ Failed to fetch thread replies:', error);
-    return []; // Return empty array on error to avoid breaking the export
+
+    if (hasMore) await new Promise(resolve => setTimeout(resolve, 1000));
   }
+
+  console.log(`✅ Found ${allReplies.length} thread replies`);
+  return allReplies;
 }
 
 console.log('🚀 SlackSnap content script loaded');

@@ -30,10 +30,23 @@ function formatDate(date, format) {
  */
 function cleanText(text) {
   if (!text) return '';
+
+  // Slack's message API uses angle-bracket mrkdwn tokens. Decode them before
+  // assigning to HTML, otherwise browsers parse the tokens as elements.
+  const slackLinksDecoded = text
+    .replace(/<mailto:([^|>]+)\|([^>]+)>/g, (_, address, label) => label === address ? address : `${label} (${address})`)
+    .replace(/<(https?:\/\/[^|>]+)\|([^>]+)>/g, (_, url, label) => label === url ? url : `${label} (${url})`)
+    .replace(/<mailto:([^>]+)>/g, '$1')
+    .replace(/<(https?:\/\/[^>]+)>/g, '$1')
+    .replace(/<@([A-Z0-9]+)\|([^>]+)>/g, '@$2')
+    .replace(/<#([A-Z0-9]+)\|([^>]+)>/g, '#$2')
+    .replace(/<!((?:channel|here|everyone))>/g, '@$1')
+    .replace(/<@subteam\^[A-Z0-9]+\|@?([^>]+)>/g, '@$1')
+    .replace(/<([^>]+)>/g, '$1');
   
   // Use browser's built-in HTML entity decoding (elegant and comprehensive)
   const tempDiv = document.createElement('div');
-  tempDiv.innerHTML = text;
+  tempDiv.innerHTML = slackLinksDecoded;
   const decodedText = tempDiv.textContent || tempDiv.innerText || '';
   
   return decodedText
@@ -41,7 +54,7 @@ function cleanText(text) {
     // Clean up whitespace
     .replace(/\n\s+/g, '\n') // Remove extra whitespace
     .replace(/\u00A0/g, ' ') // Replace non-breaking spaces
-    .replace(/\s+/g, ' '); // Normalize whitespace
+    .replace(/[\t ]{2,}/g, ' '); // Normalize inline whitespace without flattening lines
 }
 
 /**
